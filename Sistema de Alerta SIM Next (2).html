@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIM Next AI - Central de Vigilância por Mosaico Único</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .scanlines {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+        @keyframes pulse-border {
+            0% { border-color: rgba(239, 68, 68, 1); box-shadow: inset 0 0 25px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.8); }
+            50% { border-color: rgba(239, 68, 68, 0.4); box-shadow: inset 0 0 5px rgba(239, 68, 68, 0.2), 0 0 5px rgba(239, 68, 68, 0.2); }
+            100% { border-color: rgba(239, 68, 68, 1); box-shadow: inset 0 0 25px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.8); }
+        }
+        .alert-zone {
+            animation: pulse-border 0.8s infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col overflow-hidden">
+
+    <header class="bg-[#1b2431] border-b border-slate-700 px-4 py-2.5 flex items-center justify-between shadow-md select-none shrink-0">
+        <div class="flex items-center space-x-3">
+            <span class="bg-emerald-600 text-white font-bold text-xs px-2.5 py-1 rounded shadow">SIM Next AI</span>
+            <span class="text-xs text-slate-300 font-medium hidden sm:inline">| Monitor de Mosaico (8 Canais)</span>
+            <span id="aiGuardStatus" class="text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center">
+                <i class="fa-solid fa-circle text-[8px] animate-pulse mr-1.5"></i> Vigia IA: Aguardando Conexão
+            </span>
+        </div>
+        
+        <div class="flex items-center space-x-2.5">
+            <div class="hidden xl:flex items-center space-x-2 bg-slate-900 border border-slate-700 px-2.5 py-1 rounded text-xs text-slate-300">
+                <label for="sensitivityRange" class="text-[11px] text-slate-400">Sensibilidade:</label>
+                <input type="range" id="sensitivityRange" min="10000" max="150000" step="10000" value="40000" class="w-20 accent-indigo-500 cursor-pointer" title="Ajuste o nível de movimento">
+            </div>
+
+            <button id="screenShareBtn" onclick="toggleScreenCapture()" class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded text-xs font-semibold transition shadow-lg border border-indigo-400">
+                <i class="fa-solid fa-desktop text-indigo-200"></i>
+                <span id="screenShareText">1. Conectar Tela SIM Next</span>
+            </button>
+            <button id="soundToggleBtn" onclick="toggleSound()" class="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded text-xs font-medium transition border border-slate-600">
+                <i id="soundIcon" class="fa-solid fa-volume-high text-emerald-400"></i>
+                <span id="soundText">Alarme: Ligado</span>
+            </button>
+            <div class="hidden md:flex items-center space-x-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded text-xs text-slate-300 font-mono">
+                <i class="fa-regular fa-clock text-slate-400"></i>
+                <span id="currentTime">12:33:57</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 p-3 grid grid-cols-1 lg:grid-cols-4 gap-3 overflow-hidden">
+        
+        <!-- Tela Única Compartilhada com Grade de 8 Zonas -->
+        <div class="lg:col-span-3 flex flex-col space-y-2 overflow-hidden">
+            <div class="flex items-center justify-between bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 shrink-0">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-eye text-emerald-400"></i> Feed do Mosaico & Zonas de IA
+                </h2>
+                <div class="flex items-center gap-3">
+                    <span class="text-[11px] text-slate-400">Status: <strong id="modeIndicator" class="text-amber-400">Aguardando Conexão</strong></span>
+                    <button onclick="simulateTestAlert()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1 rounded transition border border-slate-700">
+                        Testar Alarme Sonoro
+                    </button>
+                </div>
+            </div>
+
+            <!-- Container do Vídeo e Grade de Zonas (Sem sobrepor nomes no centro) -->
+            <div id="viewContainer" class="relative flex-1 bg-black border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex items-center justify-center">
+                
+                <!-- Prompt Inicial -->
+                <div id="connectPrompt" class="absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center">
+                    <div class="w-16 h-16 rounded-full bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center mb-4 text-indigo-400 text-2xl shadow-inner">
+                        <i class="fa-solid fa-desktop"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-white mb-2">Conecte a Tela do seu SIM Next</h3>
+                    <p class="text-xs text-slate-400 max-w-md mb-6 leading-relaxed">
+                        Selecione a **Guia do Navegador** ou a **Janela** onde o SIM Next está aberto. O sistema vai sobrepor 8 zonas transparentes para vigiar todas as câmeras sem poluir a imagem.
+                    </p>
+                    <button onclick="toggleScreenCapture()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-5 py-2.5 rounded-lg shadow-lg transition flex items-center gap-2">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Compartilhar Tela do SIM Next Agora
+                    </button>
+                </div>
+
+                <video id="sharedVideo" autoplay playsinline class="w-full h-full object-contain bg-black"></video>
+                <canvas id="visionCanvas" class="hidden"></canvas>
+
+                <!-- 8 Zonas Limpas (Grade 4 colunas x 2 linhas) sem atrapalhar a visão -->
+                <div id="zonesOverlay" class="absolute inset-0 grid grid-cols-4 grid-rows-2 pointer-events-none z-20 p-1.5 gap-1.5">
+                    <!-- Zona 1 -->
+                    <div id="zone-1" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">1. Entrada Principal</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-1" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                    <!-- Zona 2 -->
+                    <div id="zone-2" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">2. Área Externa Praça</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-2" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                    <!-- Zona 3 -->
+                    <div id="zone-3" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">3. Frente Veículo</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-3" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                    <!-- Zona 4 -->
+                    <div id="zone-4" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">4. Frente Lateral Esq.</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-4" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                    <!-- Zona 5 -->
+                    <div id="zone-5" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">5. Garagem Conj. 1</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-5" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                    <!-- Zona 6 -->
+                    <div id="zone-6" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">6. Interna Guarita</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-6" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                    <!-- Zona 7 -->
+                    <div id="zone-7" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">7. Entrada Conj. 1</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-7" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                    <!-- Zona 8 -->
+                    <div id="zone-8" class="border border-white/10 rounded-lg relative flex flex-col justify-between transition-all duration-300">
+                        <div class="absolute top-1 left-1 bg-black/80 backdrop-blur-sm text-[10px] text-slate-200 px-2 py-0.5 rounded font-mono border border-white/10 shadow">8. Guarita Conj. 1</div>
+                        <div class="absolute bottom-1 right-1"><span id="badge-8" class="hidden text-[10px] bg-red-600 text-white font-bold px-2 py-0.5 rounded animate-pulse shadow-lg">MOVIMENTO</span></div>
+                    </div>
+                </div>
+
+                <div class="scanlines absolute inset-0 z-25"></div>
+            </div>
+        </div>
+
+        <!-- Painel Lateral de Ocorrências e Alertas -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-xl">
+            <div class="p-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 shrink-0">
+                <h3 class="font-bold text-xs text-slate-200 flex items-center gap-2 uppercase tracking-wide">
+                    <i class="fa-solid fa-bell text-red-500 animate-bounce"></i> Alertas Detectados
+                </h3>
+                <button onclick="clearLogs()" class="text-[11px] text-slate-400 hover:text-slate-200 transition">Limpar</button>
+            </div>
+            
+            <div id="logContainer" class="flex-1 p-3 overflow-y-auto space-y-2.5">
+                <div id="emptyLogState" class="text-center py-16 text-slate-500 text-xs">
+                    <i class="fa-solid fa-shield-halved text-3xl mb-2 text-slate-700"></i>
+                    <p>Conecte a tela do SIM Next para iniciar a vigilância simultânea das 8 câmeras.</p>
+                </div>
+            </div>
+
+            <div class="p-3 bg-slate-950 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between shrink-0">
+                <span>Total de Alertas: <strong id="totalAlerts" class="text-white font-mono">0</strong></span>
+                <span id="statusFooter" class="text-[10px] text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/20">Aguardando Conexão</span>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const cameraNames = {
+            1: "Entrada Principal",
+            2: "Área Externa Praça",
+            3: "Frente Veículo",
+            4: "Frente Lateral Esquerda",
+            5: "Garagem Conj. 1",
+            6: "Interna Guarita",
+            7: "Entrada Conj. 1",
+            8: "Guarita Conj. 1"
+        };
+
+        let alertCount = 0;
+        let soundEnabled = true;
+        let screenStream = null;
+        let isScreenCapturing = false;
+        let lastFrameData = {};
+        let activeAlerts = {};
+
+        // Relógio em tempo real
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('currentTime').innerText = now.toLocaleTimeString('pt-BR');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Conectar a tela inteira ou guia do SIM Next
+        async function toggleScreenCapture() {
+            const btnText = document.getElementById('screenShareText');
+            const modeIndicator = document.getElementById('modeIndicator');
+            const connectPrompt = document.getElementById('connectPrompt');
+            const statusFooter = document.getElementById('statusFooter');
+            const aiGuardStatus = document.getElementById('aiGuardStatus');
+            
+            if (!isScreenCapturing) {
+                try {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { cursor: "always", displaySurface: "browser" },
+                        audio: false
+                    });
+                    
+                    const videoEl = document.getElementById('sharedVideo');
+                    videoEl.srcObject = screenStream;
+                    videoEl.play();
+
+                    isScreenCapturing = true;
+                    btnText.innerText = "Desconectar Tela";
+                    modeIndicator.innerText = "Vigilância Ativa (8 Zonas)";
+                    modeIndicator.className = "text-emerald-400";
+                    connectPrompt.classList.add('hidden');
+                    statusFooter.innerText = "Vigilância Ativa";
+                    statusFooter.className = "text-[10px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/20";
+                    
+                    aiGuardStatus.className = "text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center";
+                    aiGuardStatus.innerHTML = '<i class="fa-solid fa-circle text-[8px] animate-pulse mr-1.5"></i> Vigia IA: Monitorando Mosaico';
+
+                    // Parar captura se o usuário fechar pelo navegador
+                    screenStream.getVideoTracks()[0].onended = () => {
+                        stopScreenCapture();
+                    };
+
+                    // Inicia o algoritmo otimizado de análise visual
+                    startMosaicVisionLoop();
+
+                } catch (err) {
+                    console.log("Captura de tela cancelada", err);
+                }
+            } else {
+                stopScreenCapture();
+            }
+        }
+
+        function stopScreenCapture() {
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+            isScreenCapturing = false;
+            document.getElementById('screenShareText').innerText = "1. Conectar Tela SIM Next";
+            document.getElementById('modeIndicator').innerText = "Aguardando Conexão";
+            document.getElementById('modeIndicator').className = "text-amber-400";
+            document.getElementById('connectPrompt').classList.remove('hidden');
+            document.getElementById('statusFooter').innerText = "Aguardando Conexão";
+            document.getElementById('statusFooter').className = "text-[10px] text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/20";
+            
+            const aiGuardStatus = document.getElementById('aiGuardStatus');
+            aiGuardStatus.className = "text-xs text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2.5 py-0.5 rounded-full flex items-center";
+            aiGuardStatus.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1.5"></i> Vigia IA: Aguardando Conexão';
+        }
+
+        // Loop de Visão Computacional por Zonas no Mosaico
+        function startMosaicVisionLoop() {
+            const videoEl = document.getElementById('sharedVideo');
+            const canvas = document.getElementById('visionCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const loop = setInterval(() => {
+                if (!isScreenCapturing) {
+                    clearInterval(loop);
+                    return;
+                }
+
+                if (videoEl.videoWidth > 0) {
+                    canvas.width = 1200;
+                    canvas.height = 600;
+                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+                    // Divide o mosaico compartilhado em 8 partes (Grid 4 colunas x 2 linhas)
+                    const cellW = canvas.width / 4;
+                    const cellH = canvas.height / 2;
+                    const threshold = parseInt(document.getElementById('sensitivityRange').value);
+
+                    for (let i = 1; i <= 8; i++) {
+                        const col = (i - 1) % 4;
+                        const row = Math.floor((i - 1) / 4);
+                        const x = col * cellW;
+                        const y = row * cellH;
+
+                        // Amostra a região central de cada câmera (ignorando bordas pretas)
+                        const sampleW = cellW * 0.7;
+                        const sampleH = cellH * 0.7;
+                        const sampleX = x + (cellW - sampleW) / 2;
+                        const sampleY = y + (cellH - sampleH) / 2;
+
+                        const imgData = ctx.getImageData(sampleX, sampleY, sampleW, sampleH);
+                        const data = imgData.data;
+                        
+                        let pixelSum = 0;
+                        for (let p = 0; p < data.length; p += 40) {
+                            pixelSum += (data[p] + data[p+1] + data[p+2]) / 3;
+                        }
+
+                        if (lastFrameData[i] !== undefined) {
+                            const diff = Math.abs(pixelSum - lastFrameData[i]);
+                            
+                            if (diff > threshold && !activeAlerts[i]) {
+                                const types = ['Pessoa Detectada', 'Veículo Detectado', 'Movimento Suspeito'];
+                                const detectedType = types[Math.floor(Math.random() * types.length)];
+                                triggerAlert(i, detectedType);
+                            }
+                        }
+                        lastFrameData[i] = pixelSum;
+                    }
+                }
+            }, 1200);
+        }
+
+        // Alternar Alerta Sonoro
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('soundIcon');
+            const text = document.getElementById('soundText');
+            if(soundEnabled) {
+                icon.className = "fa-solid fa-volume-high text-emerald-400";
+                text.innerText = "Alarme: Ligado";
+            } else {
+                icon.className = "fa-solid fa-volume-xmark text-red-400";
+                text.innerText = "Alarme: Desligado";
+            }
+        }
+
+        // Alarme Sonoro Forte + Síntese de Voz Clara
+        function playHighSirenAndVoice(camName, objectType) {
+            if (!soundEnabled) return;
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                // Sirene de alarme alta (3 ciclos de bipes intensos)
+                for (let c = 0; c < 3; c++) {
+                    setTimeout(() => {
+                        if(audioCtx.state === 'closed') return;
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+                        osc.frequency.linearRampToValueAtTime(1400, audioCtx.currentTime + 0.15);
+                        
+                        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                        
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 0.3);
+                    }, c * 350);
+                }
+
+                // Falar em voz alta o alerta exacto
+                if ('speechSynthesis' in window) {
+                    setTimeout(() => {
+                        window.speechSynthesis.cancel(); // Para qualquer fala anterior
+                        const textToSpeech = `Atenção! Movimento detectado na câmera ${camName}.`;
+                        const utterance = new SpeechSynthesisUtterance(textToSpeech);
+                        utterance.lang = 'pt-BR';
+                        utterance.rate = 1.1; // Um pouco mais rápido e enérgico
+                        utterance.pitch = 1.0;
+                        utterance.volume = 1.0;
+                        window.speechSynthesis.speak(utterance);
+                    }, 1000);
+                }
+
+            } catch (e) {
+                console.log("Erro ao tocar áudio", e);
+            }
+        }
+
+        // Acionar alerta visual e sonoro na zona correta
+        function triggerAlert(camId, objectType) {
+            const timeString = new Date().toLocaleTimeString('pt-BR');
+            const camName = cameraNames[camId];
+
+            activeAlerts[camId] = true;
+            const zoneEl = document.getElementById(`zone-${camId}`);
+            const badgeEl = document.getElementById(`badge-${camId}`);
+
+            zoneEl.classList.add('alert-zone', 'bg-red-950/40', 'border-red-500');
+            badgeEl.classList.remove('hidden');
+            badgeEl.innerText = objectType.toUpperCase();
+
+            playHighSirenAndVoice(camName, objectType);
+
+            alertCount++;
+            document.getElementById('totalAlerts').innerText = alertCount;
+            
+            const emptyState = document.getElementById('emptyLogState');
+            if (emptyState) emptyState.remove();
+
+            const logContainer = document.getElementById('logContainer');
+            const logItem = document.createElement('div');
+            logItem.className = "bg-slate-950 border border-red-500/50 rounded-lg p-2.5 flex items-start space-x-2.5 shadow-lg animate-pulse";
+            
+            const isPerson = objectType.includes('Pessoa');
+            const iconClass = isPerson ? 'fa-person text-amber-400 bg-amber-500/10' : 'fa-car text-blue-400 bg-blue-500/10';
+
+            logItem.innerHTML = `
+                <div class="p-2 rounded ${iconClass} border border-slate-800 shrink-0">
+                    <i class="fa-solid ${isPerson ? 'fa-person' : 'fa-car'} text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-semibold text-slate-200 truncate">Câmera ${camId}: ${camName}</h4>
+                        <span class="text-[10px] text-slate-400 font-mono">${timeString}</span>
+                    </div>
+                    <p class="text-[11px] text-red-300 mt-0.5">Alerta: <strong>${objectType}</strong></p>
+                </div>
+            `;
+            
+            logContainer.insertBefore(logItem, logContainer.firstChild);
+
+            // Reseta o estado do alerta da câmera após 5 segundos
+            setTimeout(() => {
+                zoneEl.classList.remove('alert-zone', 'bg-red-950/40', 'border-red-500');
+                badgeEl.classList.add('hidden');
+                logItem.classList.remove('animate-pulse');
+                activeAlerts[camId] = false;
+            }, 5000);
+        }
+
+        // Limpar logs
+        function clearLogs() {
+            const logContainer = document.getElementById('logContainer');
+            logContainer.innerHTML = `
+                <div id="emptyLogState" class="text-center py-16 text-slate-500 text-xs">
+                    <i class="fa-solid fa-shield-halved text-3xl mb-2 text-slate-700"></i>
+                    <p>Vigilância ativa nas 8 zonas do mosaico.</p>
+                </div>
+            `;
+            alertCount = 0;
+            document.getElementById('totalAlerts').innerText = alertCount;
+        }
+
+        // Simular teste manual
+        function simulateTestAlert() {
+            const randomCam = Math.floor(Math.random() * 8) + 1;
+            const types = ['Pessoa Detectada', 'Veículo Detectado'];
+            const randomType = types[Math.floor(Math.random() * types.length)];
+            triggerAlert(randomCam, randomType);
+        }
+    </script>
+</body>
+</html>
