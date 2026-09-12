@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alerta Vigilante - SIM Next</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; user-select: none; }
+        .scanlines {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+        @keyframes alert-pulse {
+            0% { border-color: rgba(239, 68, 68, 1); box-shadow: inset 0 0 35px rgba(239, 68, 68, 0.7), 0 0 25px rgba(239, 68, 68, 0.9); }
+            50% { border-color: rgba(239, 68, 68, 0.4); box-shadow: inset 0 0 10px rgba(239, 68, 68, 0.2), 0 0 10px rgba(239, 68, 68, 0.4); }
+            100% { border-color: rgba(239, 68, 68, 1); box-shadow: inset 0 0 35px rgba(239, 68, 68, 0.7), 0 0 25px rgba(239, 68, 68, 0.9); }
+        }
+        .zone-alert-active {
+            animation: alert-pulse 0.4s infinite;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.6);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col overflow-hidden">
+
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between shadow-xl shrink-0 z-50">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-2">
+                <i class="fa-solid fa-shield-halved"></i> Alerta Vigilante
+            </div>
+            <span class="text-xs text-slate-400 font-medium hidden sm:inline">| SIM Next - Vigilância Avançada</span>
+            <span id="aiGuardStatus" class="text-xs text-amber-400 bg-amber-950/80 border border-amber-500/30 px-3 py-1 rounded-full flex items-center shadow-inner">
+                <i class="fa-solid fa-circle text-[8px] mr-1.5"></i> Status: Aguardando Conexão
+            </span>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+            <div class="hidden xl:flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-3 py-1 rounded-lg text-xs text-slate-300 shadow-inner">
+                <label for="sensitivityRange" class="text-[11px] text-slate-400 font-medium">Sensibilidade (Filtro Anti-Árvores):</label>
+                <input type="range" id="sensitivityRange" min="2000" max="40000" step="1000" value="12000" class="w-24 accent-indigo-500 cursor-pointer" title="Ajuste alto ignora balanço de folhas/árvores">
+            </div>
+
+            <button id="screenShareBtn" onclick="toggleScreenCapture()" class="flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-lg shadow-indigo-600/30 border border-indigo-400/30">
+                <i class="fa-solid fa-desktop text-indigo-200"></i>
+                <span id="screenShareText">1. Conectar Tela SIM Next</span>
+            </button>
+            <button id="soundToggleBtn" onclick="toggleSound()" class="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold transition border border-slate-700 shadow-sm">
+                <i id="soundIcon" class="fa-solid fa-volume-high text-emerald-400"></i>
+                <span id="soundText">Alarme: Ligado</span>
+            </button>
+            <div class="hidden md:flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-3 py-2 rounded-lg text-xs text-slate-300 font-mono shadow-inner">
+                <i class="fa-regular fa-clock text-indigo-400"></i>
+                <span id="currentTime">12:00:00</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 p-3 grid grid-cols-1 lg:grid-cols-4 gap-3 overflow-hidden">
+        
+        <!-- Main Video & Custom Zones Editor (Expanded area) -->
+        <div class="lg:col-span-3 flex flex-col space-y-2.5 overflow-hidden">
+            <div class="flex items-center justify-between bg-slate-900/90 px-3.5 py-2 rounded-xl border border-slate-800 shrink-0 shadow-md">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-draw-polygon text-indigo-400"></i> Editor de Zonas de Monitoramento
+                    </h2>
+                    <span id="drawingModeIndicator" class="text-[11px] bg-indigo-950/80 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-lg font-medium">
+                        Dica: Clique e arraste o mouse sobre qualquer câmera para desenhar zonas de alerta
+                    </span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="clearAllZones()" class="bg-red-950/50 hover:bg-red-900/80 text-red-300 text-xs px-3 py-1.5 rounded-lg transition border border-red-500/30 font-semibold flex items-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-trash-can"></i> Apagar Todas
+                    </button>
+                    <button onclick="testAlarmSound()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg transition border border-slate-700 font-semibold shadow-sm">
+                        Testar Alarme
+                    </button>
+                </div>
+            </div>
+
+            <!-- Interactive Viewport Container (Maximised for video display) -->
+            <div id="viewContainer" class="relative flex-1 bg-black border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center cursor-crosshair">
+                
+                <!-- Initial Connection Prompt -->
+                <div id="connectPrompt" class="absolute inset-0 z-40 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center backdrop-blur-md">
+                    <div class="w-20 h-20 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center mb-5 text-indigo-400 text-3xl shadow-xl shadow-indigo-600/10">
+                        <i class="fa-solid fa-desktop"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-2">Conecte a Tela do seu SIM Next</h3>
+                    <p class="text-xs text-slate-400 max-w-md mb-6 leading-relaxed">
+                        Selecione a janela ou aba onde o SIM Next está aberto. Em seguida, desenhe quadrados nas câmeras que deseja monitorar. O sistema vai filtrar o movimento e ignorar árvores/folhagens, alertando apenas movimentos reais com aviso sonoro!
+                    </p>
+                    <button onclick="toggleScreenCapture()" class="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold px-6 py-3 rounded-xl shadow-xl shadow-indigo-600/30 transition flex items-center gap-2.5 border border-indigo-400/40">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Compartilhar Tela do SIM Next Agora
+                    </button>
+                </div>
+
+                <video id="sharedVideo" autoplay playsinline class="w-full h-full object-contain bg-black"></video>
+                <canvas id="visionCanvas" class="hidden"></canvas>
+
+                <!-- Zones Render Layer (Transparent clean borders without blur) -->
+                <div id="zonesLayer" class="absolute inset-0 z-30 pointer-events-none"></div>
+
+                <div class="scanlines absolute inset-0 z-35"></div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+            <div class="p-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 shrink-0">
+                <h3 class="font-bold text-xs text-slate-200 flex items-center gap-2 uppercase tracking-wide">
+                    <i class="fa-solid fa-bell text-red-500 animate-bounce"></i> Ocorrências Detectadas
+                </h3>
+                <button onclick="clearLogs()" class="text-[11px] text-slate-400 hover:text-slate-200 transition font-medium">Limpar</button>
+            </div>
+            
+            <div id="logContainer" class="flex-1 p-3 overflow-y-auto space-y-2.5">
+                <div id="emptyLogState" class="text-center py-20 text-slate-500 text-xs">
+                    <i class="fa-solid fa-shield text-4xl mb-3 text-slate-700"></i>
+                    <p class="font-medium">Nenhum movimento registrado.</p>
+                    <p class="text-[11px] text-slate-600 mt-1">Desenhe zonas e aguarde a detecção.</p>
+                </div>
+            </div>
+
+            <div class="p-3 bg-slate-950/90 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between shrink-0">
+                <span>Total de Alertas: <strong id="totalAlerts" class="text-white font-mono">0</strong></span>
+                <span id="statusFooter" class="text-[10px] text-amber-400 bg-amber-950/80 px-2.5 py-1 rounded-full border border-amber-500/20 font-semibold">Aguardando Conexão</span>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let alertCount = 0;
+        let soundEnabled = true;
+        let screenStream = null;
+        let isScreenCapturing = false;
+        
+        let zones = []; 
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+
+        // Real-time clock
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('currentTime').innerText = now.toLocaleTimeString('pt-BR');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Screen Capture Toggle
+        async function toggleScreenCapture() {
+            const btnText = document.getElementById('screenShareText');
+            const statusFooter = document.getElementById('statusFooter');
+            const aiGuardStatus = document.getElementById('aiGuardStatus');
+            const connectPrompt = document.getElementById('connectPrompt');
+            
+            if (!isScreenCapturing) {
+                try {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { cursor: "always", displaySurface: "browser" },
+                        audio: false
+                    });
+                    
+                    const videoEl = document.getElementById('sharedVideo');
+                    videoEl.srcObject = screenStream;
+                    videoEl.play();
+
+                    isScreenCapturing = true;
+                    btnText.innerText = "Desconectar Tela";
+                    connectPrompt.classList.add('hidden');
+                    statusFooter.innerText = "Vigilância Ativa";
+                    statusFooter.className = "text-[10px] text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-full border border-emerald-500/20 font-semibold";
+                    
+                    aiGuardStatus.className = "text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full flex items-center shadow-inner";
+                    aiGuardStatus.innerHTML = '<i class="fa-solid fa-circle text-[8px] animate-pulse mr-1.5"></i> Status: Monitorando Zonas';
+
+                    screenStream.getVideoTracks()[0].onended = () => {
+                        stopScreenCapture();
+                    };
+
+                    setupDrawingEvents();
+                    startVisionLoop();
+
+                } catch (err) {
+                    console.log("Captura de tela cancelada", err);
+                }
+            } else {
+                stopScreenCapture();
+            }
+        }
+
+        function stopScreenCapture() {
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+            isScreenCapturing = false;
+            document.getElementById('screenShareText').innerText = "1. Conectar Tela SIM Next";
+            document.getElementById('connectPrompt').classList.remove('hidden');
+            document.getElementById('statusFooter').innerText = "Aguardando Conexão";
+            document.getElementById('statusFooter').className = "text-[10px] text-amber-400 bg-amber-950/80 px-2.5 py-1 rounded-full border border-amber-500/20 font-semibold";
+            
+            const aiGuardStatus = document.getElementById('aiGuardStatus');
+            aiGuardStatus.className = "text-xs text-amber-400 bg-amber-950/60 border border-amber-500/30 px-3 py-1 rounded-full flex items-center shadow-inner";
+            aiGuardStatus.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1.5"></i> Status: Aguardando Conexão';
+        }
+
+        // Setup drawing custom zones
+        function setupDrawingEvents() {
+            const container = document.getElementById('viewContainer');
+
+            container.onmousedown = (e) => {
+                if (!isScreenCapturing) return;
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+
+                const rect = container.getBoundingClientRect();
+                isDrawing = true;
+                startX = e.clientX - rect.left;
+                startY = e.clientY - rect.top;
+
+                let tempBox = document.getElementById('tempDrawingBox');
+                if (!tempBox) {
+                    tempBox = document.createElement('div');
+                    tempBox.id = 'tempDrawingBox';
+                    tempBox.className = "absolute border-2 border-dashed border-indigo-400 bg-indigo-500/10 z-35 pointer-events-none rounded-xl";
+                    container.appendChild(tempBox);
+                }
+                tempBox.style.left = `${startX}px`;
+                tempBox.style.top = `${startY}px`;
+                tempBox.style.width = `0px`;
+                tempBox.style.height = `0px`;
+                tempBox.classList.remove('hidden');
+            };
+
+            container.onmousemove = (e) => {
+                if (!isDrawing) return;
+                const rect = container.getBoundingClientRect();
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top;
+
+                const left = Math.min(startX, currentX);
+                const top = Math.min(startY, currentY);
+                const width = Math.abs(currentX - startX);
+                const height = Math.abs(currentY - startY);
+
+                const tempBox = document.getElementById('tempDrawingBox');
+                if (tempBox) {
+                    tempBox.style.left = `${left}px`;
+                    tempBox.style.top = `${top}px`;
+                    tempBox.style.width = `${width}px`;
+                    tempBox.style.height = `${height}px`;
+                }
+            };
+
+            container.onmouseup = (e) => {
+                if (!isDrawing) return;
+                isDrawing = false;
+
+                const tempBox = document.getElementById('tempDrawingBox');
+                if (tempBox) tempBox.classList.add('hidden');
+
+                const rect = container.getBoundingClientRect();
+                const endX = e.clientX - rect.left;
+                const endY = e.clientY - rect.top;
+
+                const left = Math.min(startX, endX);
+                const top = Math.min(startY, endY);
+                const width = Math.abs(endX - startX);
+                const height = Math.abs(endY - startY);
+
+                if (width > 30 && height > 30) {
+                    const zoneId = 'zone_' + Date.now();
+                    const zoneName = `Zona ${zones.length + 1}`;
+                    
+                    const relX = (left / container.clientWidth) * 100;
+                    const relY = (top / container.clientHeight) * 100;
+                    const relW = (width / container.clientWidth) * 100;
+                    const relH = (height / container.clientHeight) * 100;
+
+                    zones.push({
+                        id: zoneId,
+                        name: zoneName,
+                        x: relX,
+                        y: relY,
+                        w: relW,
+                        h: relH,
+                        prevGrid: null,
+                        lastAlertTime: 0
+                    });
+
+                    renderZones();
+                }
+            };
+        }
+
+        // Render zones with bottom banner message area
+        function renderZones() {
+            const layer = document.getElementById('zonesLayer');
+            layer.innerHTML = '';
+
+            zones.forEach(z => {
+                const box = document.createElement('div');
+                box.id = z.id;
+                box.className = "absolute border-2 border-indigo-500/80 bg-transparent rounded-xl pointer-events-auto flex flex-col justify-between items-end p-2 transition-all shadow-lg";
+                box.style.left = `${z.x}%`;
+                box.style.top = `${z.y}%`;
+                box.style.width = `${z.w}%`;
+                box.style.height = `${z.h}%`;
+
+                box.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="bg-indigo-950/90 text-indigo-200 text-[10px] font-bold px-2 py-0.5 rounded-md border border-indigo-500/40 shadow">${z.name}</span>
+                        <button onclick="deleteZone('${z.id}')" class="bg-red-950/90 hover:bg-red-900 text-red-300 w-6 h-6 rounded-lg flex items-center justify-center border border-red-500/40 shadow cursor-pointer transition" title="Apagar Zona">
+                            <i class="fa-solid fa-xmark text-[11px]"></i>
+                        </button>
+                    </div>
+                    <!-- Bottom banner displaying movement detected message -->
+                    <div id="${z.id}_banner" class="hidden w-full bg-red-600/90 text-white text-[11px] font-bold py-1 px-2 rounded-lg text-center shadow-lg uppercase tracking-wider animate-pulse border border-red-400">
+                        Movimento Detectado!
+                    </div>
+                `;
+
+                layer.appendChild(box);
+            });
+        }
+
+        function deleteZone(id) {
+            zones = zones.filter(z => z.id !== id);
+            renderZones();
+        }
+
+        function clearAllZones() {
+            zones = [];
+            renderZones();
+        }
+
+        // Advanced Vision Processing Algorithm with Anti-Tree Noise Filtering
+        function startVisionLoop() {
+            const videoEl = document.getElementById('sharedVideo');
+            const canvas = document.getElementById('visionCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const loop = setInterval(() => {
+                if (!isScreenCapturing) {
+                    clearInterval(loop);
+                    return;
+                }
+
+                if (videoEl.videoWidth > 0 && zones.length > 0) {
+                    canvas.width = videoEl.videoWidth;
+                    canvas.height = videoEl.videoHeight;
+                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+                    const sensitivity = parseInt(document.getElementById('sensitivityRange').value);
+                    const now = Date.now();
+
+                    zones.forEach(z => {
+                        const pixelX = Math.floor((z.x / 100) * canvas.width);
+                        const pixelY = Math.floor((z.y / 100) * canvas.height);
+                        const pixelW = Math.floor((z.w / 100) * canvas.width);
+                        const pixelH = Math.floor((z.h / 100) * canvas.height);
+
+                        if (pixelW > 20 && pixelH > 20) {
+                            try {
+                                const imgData = ctx.getImageData(pixelX, pixelY, pixelW, pixelH);
+                                const data = imgData.data;
+                                
+                                // Sample grid blocks to ignore micro-movement like leaves/trees swaying
+                                const step = 16; 
+                                let currentGrid = [];
+                                for (let p = 0; p < data.length; p += (4 * step)) {
+                                    // Average RGB brightness per sample point
+                                    const avg = (data[p] + data[p+1] + data[p+2]) / 3;
+                                    currentGrid.push(avg);
+                                }
+
+                                if (z.prevGrid && z.prevGrid.length === currentGrid.length) {
+                                    let changedPixels = 0;
+                                    let totalDiffSum = 0;
+
+                                    for (let i = 0; i < currentGrid.length; i++) {
+                                        const diff = Math.abs(currentGrid[i] - z.prevGrid[i]);
+                                        // Threshold per pixel block to count as substantial change (filters out light flicker and trees)
+                                        if (diff > 28) {
+                                            changedPixels++;
+                                            totalDiffSum += diff;
+                                        }
+                                    }
+
+                                    // Requires both a minimum volume of changed pixels and high intensity to avoid wind/trees false positives
+                                    if (changedPixels > (currentGrid.length * 0.12) && totalDiffSum > sensitivity && (now - z.lastAlertTime > 3000)) {
+                                        z.lastAlertTime = now;
+                                        triggerZoneAlert(z);
+                                    }
+                                }
+                                z.prevGrid = currentGrid;
+                            } catch (err) {
+                                // Prevent canvas boundary overflow exceptions
+                            }
+                        }
+                    });
+                }
+            }, 500);
+        }
+
+        // Pure tone alarm generator (Siren beep without voice)
+        function playAlarmSound() {
+            if (!soundEnabled) return;
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+
+                for (let i = 0; i < 4; i++) {
+                    setTimeout(() => {
+                        if (audioCtx.state === 'closed') return;
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(750, audioCtx.currentTime);
+                        osc.frequency.linearRampToValueAtTime(1400, audioCtx.currentTime + 0.15);
+                        
+                        gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                        
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 0.3);
+                    }, i * 320);
+                }
+            } catch (e) {
+                console.log("Erro ao tocar áudio", e);
+            }
+        }
+
+        function testAlarmSound() {
+            playAlarmSound();
+        }
+
+        // Trigger Alert with on-screen zone banner and log entry
+        function triggerZoneAlert(zone) {
+            const timeString = new Date().toLocaleTimeString('pt-BR');
+            const zoneBox = document.getElementById(zone.id);
+            const zoneBanner = document.getElementById(`${zone.id}_banner`);
+
+            if (zoneBox) {
+                zoneBox.classList.add('zone-alert-active', 'border-red-500', 'bg-red-950/20');
+            }
+            if (zoneBanner) {
+                zoneBanner.classList.remove('hidden');
+            }
+
+            playAlarmSound();
+
+            alertCount++;
+            document.getElementById('totalAlerts').innerText = alertCount;
+            
+            const emptyState = document.getElementById('emptyLogState');
+            if (emptyState) emptyState.remove();
+
+            const logContainer = document.getElementById('logContainer');
+            const logItem = document.createElement('div');
+            logItem.className = "bg-slate-950 border border-red-500/50 rounded-xl p-3 flex items-start space-x-3 shadow-xl animate-pulse";
+            
+            logItem.innerHTML = `
+                <div class="p-2.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-sm"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold text-slate-200 truncate">${zone.name}</h4>
+                        <span class="text-[10px] text-slate-400 font-mono">${timeString}</span>
+                    </div>
+                    <p class="text-[11px] text-red-400 font-bold mt-1 uppercase tracking-wide">Movimento Detectado!</p>
+                </div>
+            `;
+            
+            logContainer.insertBefore(logItem, logContainer.firstChild);
+
+            setTimeout(() => {
+                if (zoneBox) {
+                    zoneBox.classList.remove('zone-alert-active', 'border-red-500', 'bg-red-950/20');
+                }
+                if (zoneBanner) {
+                    zoneBanner.classList.add('hidden');
+                }
+                logItem.classList.remove('animate-pulse');
+            }, 4000);
+        }
+
+        // Sound Toggle
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('soundIcon');
+            const text = document.getElementById('soundText');
+            if(soundEnabled) {
+                icon.className = "fa-solid fa-volume-high text-emerald-400";
+                text.innerText = "Alarme: Ligado";
+            } else {
+                icon.className = "fa-solid fa-volume-xmark text-red-400";
+                text.innerText = "Alarme: Desligado";
+            }
+        }
+
+        // Clear Logs
+        function clearLogs() {
+            const logContainer = document.getElementById('logContainer');
+            logContainer.innerHTML = `
+                <div id="emptyLogState" class="text-center py-20 text-slate-500 text-xs">
+                    <i class="fa-solid fa-shield text-4xl mb-3 text-slate-700"></i>
+                    <p class="font-medium">Nenhum movimento registrado.</p>
+                </div>
+            `;
+            alertCount = 0;
+            document.getElementById('totalAlerts').innerText = alertCount;
+        }
+    </script>
+</body>
+</html>
